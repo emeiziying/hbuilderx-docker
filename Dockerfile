@@ -10,10 +10,9 @@ ARG HBUILDERX_URL
 
 # 下载 HBuilderX
 WORKDIR /opt
-RUN wget --no-check-certificate ${HBUILDERX_URL} -O hbuilderx.tar.gz && \
+RUN wget --no-check-certificate ${HBUILDERX_URL} -qO hbuilderx.tar.gz && \
     mkdir /opt/hbuilderx && \
-    tar -xzf hbuilderx.tar.gz -C /opt/hbuilderx --strip-components=1 && \
-    rm hbuilderx.tar.gz
+    tar -xzf hbuilderx.tar.gz -C /opt/hbuilderx --strip-components=1
 
 # 基础镜像：Ubuntu 22.04（兼容性最好）
 FROM ubuntu:22.04
