@@ -38,11 +38,21 @@ jobs:
             --build-arg HBUILDERX_URL=${{ matrix.hbuilderx.url }} \
             --output type=docker,dest=./hbuilderx.${{ matrix.hbuilderx.version }}.tar .
 
+      - name: Build Slim Docker image for HBuilderX ${{ matrix.hbuilderx.version }}
+        if: always()
+        run: |
+          docker buildx build \
+            --platform linux/amd64 \
+            -t hbuilderx:${{ matrix.hbuilderx.version }}-slim \
+            --build-arg HBUILDERX_URL=${{ matrix.hbuilderx.url }} \
+            --build-arg SLIM=true \
+            --output type=docker,dest=./hbuilderx.${{ matrix.hbuilderx.version }}-slim.tar .
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: hbuilderx-${{ matrix.hbuilderx.version }}-image
-          path: ./hbuilderx.${{ matrix.hbuilderx.version }}.tar
+          path: ./hbuilderx.${{ matrix.hbuilderx.version }}*.tar
 
   release:
     needs: build

@@ -4,15 +4,38 @@ FROM ubuntu:22.04 AS builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wget tar curl
+    wget tar curl \
+    binutils
 
 ARG HBUILDERX_URL
+
+ARG SLIM=false
 
 # 下载 HBuilderX
 WORKDIR /opt
 RUN wget --no-check-certificate ${HBUILDERX_URL} -qO hbuilderx.tar.gz && \
     mkdir /opt/hbuilderx && \
-    tar -xzf hbuilderx.tar.gz -C /opt/hbuilderx --strip-components=1
+    tar -xzf hbuilderx.tar.gz -C /opt/hbuilderx --strip-components=1 && \
+    strip --strip-unneeded /opt/hbuilderx/cli /opt/hbuilderx/HBuilderX && \
+    find /opt/hbuilderx -type f -name "*.so*" -exec strip --strip-unneeded {} || true \; && \
+    # 精简 HBuilderX
+    [[ ${SLIM} == "true" ]] && \
+    # Remove unnecessary files to reduce image size
+    rm -rf /opt/hbuilderx/{readme,LICENSE*,ReleaseNote*} && \
+    # Remove some plugin that are not commonly used in Linux environment
+    rm -rf /opt/hbuilderx/plugins/{\
+        # UTS Development (not compiler)
+        uts-development-*,\
+        # WeChat Mini Program CI
+        weapp-miniprogram-ci,\
+        # WeChat Tools
+        weapp-tools,\
+        # Chrome
+        chrome-base,\
+        # Editor Language Support
+        hbuilderx-language-services,\
+        hbuilderx-issue-reporter\
+    }
 
 # 基础镜像：Ubuntu 22.04（兼容性最好）
 FROM ubuntu:22.04
@@ -34,7 +57,7 @@ RUN apt-get update && \
     zlib1g libstdc++6 libgcc-s1 libzstd1 libcairo2 \
     libxkbcommon0 libxkbcommon-x11-0 libasound2 \
     libmtdev1 libinput10 libquazip5-1 \
-    fish \
+    ca-certificates \
     # tini 用于作为 PID 1 进程，处理僵尸进程
     tini && \
     # 清理缓存
@@ -50,8 +73,6 @@ COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
 COPY --from=node /opt/yarn-* /opt/
 COPY --from=node /usr/local/bin/node /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack /usr/local/bin/yarn* /usr/local/bin/
 
-# 创建用户 node
-RUN useradd -m -s /usr/bin/fish node
 
 # 设置环境变量
 ENV PATH="/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
@@ -60,5 +81,9 @@ COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
+
+# 创建用户 node
+RUN useradd -m node
+USER node
 
 CMD []

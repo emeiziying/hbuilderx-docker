@@ -7,4 +7,4 @@ echo "🚀 Starting HBuilderX in background..."
 
 echo "✅ HBuilderX started."
 
-if [ "$#" -gt 0 ]; then exec "$@"; else exec fish; fi
+if [ "$#" -gt 0 ]; then exec "$@"; else exec bash; fi
