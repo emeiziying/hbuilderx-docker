@@ -40,10 +40,10 @@ ENV N_PREFIX=/home/node/.n
 USER node
 RUN curl -L https://bit.ly/n-install | bash -s -- -y 22 && \
     mkdir -p $HOME/.n && \
-    /home/node/n/bin/n 22
+    ${N_PREFIX}/bin/n 22
 
 # 设置环境变量
-ENV PATH="/home/node/n/bin:/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
+ENV PATH="${N_PREFIX}/bin:/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
 
 # 默认启动 shell
 CMD ["fish"]
