@@ -14,7 +14,7 @@ RUN apt-get update && \
     zlib1g libstdc++6 libgcc-s1 libzstd1 libcairo2 \
     libxkbcommon0 libxkbcommon-x11-0 libasound2 \
     libmtdev1 libinput10 libquazip5-1 \
-    fish wget tar && \
+    fish wget tar curl && \
     rm -rf /var/lib/apt/lists/*
 
 # 安装 nodejs 22
