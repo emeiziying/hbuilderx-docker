@@ -7,36 +7,28 @@ RUN apt-get update && \
     wget tar curl \
     binutils
 
-ARG HBUILDERX_URL
+ARG HBUILDERX_PATH=./.cache/hbuilderx
 
 ARG SLIM=false
 
-# 下载 HBuilderX
+# 复制 HBuilderX
 WORKDIR /opt
-RUN wget --no-check-certificate ${HBUILDERX_URL} -qO hbuilderx.tar.gz && \
-    mkdir /opt/hbuilderx && \
-    tar -xzf hbuilderx.tar.gz -C /opt/hbuilderx --strip-components=1 && \
-    strip --strip-unneeded /opt/hbuilderx/cli /opt/hbuilderx/HBuilderX && \
+COPY ${HBUILDERX_PATH} /opt/hbuilderx
+RUN strip --strip-unneeded /opt/hbuilderx/cli /opt/hbuilderx/HBuilderX && \
     find /opt/hbuilderx -type f -name "*.so*" -exec strip --strip-unneeded {} || true \;
 
 # 精简 HBuilderX
+# plugins 目录下只保留 about compile-dart-sass compile-less compile-node-sass uniapp-cli uniapp-cli-vite
 RUN if [ ${SLIM} == "true" ]; then \
-    # Remove unnecessary files to reduce image size
-    rm -rf /opt/hbuilderx/{readme,LICENSE*,ReleaseNote*} && \
-    # Remove some plugin that are not commonly used in Linux environment
-    rm -rf /opt/hbuilderx/plugins/{\
-        # UTS Development (not compiler)
-        uts-development-*,\
-        # WeChat Mini Program CI
-        weapp-miniprogram-ci,\
-        # WeChat Tools
-        weapp-tools,\
-        # Chrome
-        chrome-base,\
-        # Editor Language Support
-        hbuilderx-language-services,\
-        hbuilderx-issue-reporter\
-    }; fi
+    # 先把文件夹名字改成临时的
+    mv /opt/hbuilderx /opt/hbuilderx_full && \
+    mkdir /opt/hbuilderx && \
+    # 先复制基础文件
+    cp -r /opt/hbuilderx_full/{HBuilderX,cli,platforms,*.so*} /opt/hbuilderx/ && \
+    # 创建 plugins 目录
+    mkdir -p /opt/hbuilderx/plugins && \
+    # 复制需要保留的插件
+    cp -r /opt/hbuilderx_full/plugins/{about,compile-dart-sass,compile-less,compile-node-sass,uniapp-cli,uniapp-cli-vite} /opt/hbuilderx/plugins/
 
 # 基础镜像：Ubuntu 22.04（兼容性最好）
 FROM ubuntu:22.04
@@ -48,22 +40,16 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 # 安装依赖（Qt5、ICU、glib、zlib 等）
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libglib2.0-0 libglib2.0-bin libx11-6 libx11-xcb1 libgl1-mesa-glx \
-    libharfbuzz0b libfreetype6 fontconfig \
-    libxrender1 libxi6 libxext6 libxfixes3 libxcb1 \
-    libxcb-keysyms1 libxcb-render0 libxcb-shape0 libxcb-shm0 \
-    libxcb-xfixes0 libxcb-icccm4 libxcb-image0 libxcb-sync1 \
-    libxcb-randr0 libxcb-render-util0 \
-    libpcre2-16-0 libdouble-conversion3 libicu70 \
-    zlib1g libstdc++6 libgcc-s1 libzstd1 libcairo2 \
-    libxkbcommon0 libxkbcommon-x11-0 libasound2 \
-    libmtdev1 libinput10 libquazip5-1 \
+    libglib2.0-0 libx11-6 libgl1-mesa-glx \
+    libharfbuzz0b libfreetype6 \
+    libxrender1 libstdc++6 libgcc-s1 \
+    libpcre2-16-0 libicu70 zlib1g \
     ca-certificates \
     # tini 用于作为 PID 1 进程，处理僵尸进程
     tini && \
     # 清理缓存
     rm -rf /var/lib/apt/lists/* && \
-    apt purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
+    apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
     rm -rf /tmp/*
 
 # 从 builder 镜像复制 HBuilderX

@@ -30,6 +30,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Cache HBuilderX tgz
+        id: cache-hbuilderx
+        uses: actions/cache@v4
+        with:
+          key: hbuilderx-${{ matrix.hbuilderx.url }}
+          path: ./.cache/hbuilderx
+
+      - name: Download HBuilderX ${{ matrix.hbuilderx.version }}
+        if: steps.cache-hbuilderx.outputs.cache-hit != 'true'
+        run: |
+          wget -O ./hbuilderx.tar.gz ${{ matrix.hbuilderx.url }}
+          mkdir -p ./.cache/hbuilderx
+          tar -xzf hbuilderx.tar.gz -C ./.cache/hbuilderx --strip-components=1
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -38,7 +52,7 @@ jobs:
           docker buildx build \
             --platform linux/amd64 \
             -t hbuilderx:${{ matrix.hbuilderx.version }} \
-            --build-arg HBUILDERX_URL=${{ matrix.hbuilderx.url }} \
+            --build-arg HBUILDERX_PATH=./.cache/hbuilderx \
             --build-arg SLIM=${{ matrix.slim }} \
             --output type=docker,dest=./hbuilderx.${{ matrix.hbuilderx.version }}${{ matrix.slim && '-slim' }}.tar .
 
