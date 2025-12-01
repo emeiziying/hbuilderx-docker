@@ -41,10 +41,9 @@ FROM ubuntu:22.04
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
-RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
-
-# 安装依赖（Qt5、ICU、glib、zlib 等）
-RUN apt-get update && \
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
+    # 安装依赖（Qt5、ICU、glib、zlib 等）
+    apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libglib2.0-0 libgl1-mesa-glx \
     libharfbuzz0b libfreetype6 \
@@ -68,8 +67,7 @@ RUN apt-get update && \
 COPY --from=builder /opt/hbuilderx /opt/hbuilderx
 
 # 从 builder 镜像复制 libssl1.1
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/
-COPY --from=builder /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/
+COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/
 # 创建软链接确保 Qt5 能找到 libssl 和 libcrypto
 RUN ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so && \
     ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so
