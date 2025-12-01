@@ -1,0 +1,6 @@
+services:
+  hbuilderx:
+    build:
+      context: .
+      args:
+        SLIM: "true"
