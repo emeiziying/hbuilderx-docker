@@ -1,11 +1,19 @@
 FROM node:22-bookworm-slim AS node
 
+RUN apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    binutils && \
+    strip --strip-unneeded /usr/local/bin/node && \
+    for f in LICENSE README.md docs man; do \
+        rm -rf /usr/local/lib/node_modules/npm/$f; \
+    done
+
 FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    wget tar curl \
-    binutils
+    wget tar curl xz-utils \
+    binutils squashfs-tools
 
 ARG HBUILDERX_PATH=./.cache/hbuilderx
 
@@ -20,7 +28,8 @@ RUN strip --strip-unneeded /opt/hbuilderx/cli /opt/hbuilderx/HBuilderX && \
     # 因此需要手动安装 libssl1.1
     # 我们先用 wget 下载到 builder 镜像，等会从 builder 镜像复制到最终镜像中
     wget http://archive.ubuntu.com/ubuntu/pool/main/o/openssl/libssl1.1_1.1.0g-2ubuntu4_amd64.deb && \
-    dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb
+    dpkg -i libssl1.1_1.1.0g-2ubuntu4_amd64.deb && \
+    strip --strip-unneeded /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1
 
 # 精简 HBuilderX
 # plugins 目录下只保留 about compile-dart-sass compile-less compile-node-sass uniapp-cli uniapp-cli-vite
@@ -39,6 +48,9 @@ RUN if [ "${SLIM}" = "true" ]; then \
         do cp -r /opt/hbuilderx_full/plugins/$f /opt/hbuilderx/plugins/; done \
     fi
 
+# 打包 HBuilderX 以便后续复制
+RUN tar -cJf /opt/hbuilderx.tar.xz -C /opt hbuilderx
+
 # 基础镜像：Debian Bookworm Slim
 FROM debian:bookworm-slim
 
@@ -55,7 +67,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     libx11-6 libx11-xcb1 libxcb1 libxcb-render0 libxcb-shm0 \
     libxext6 libxfixes3 libxi6 \
     libfontconfig1 \
-    ca-certificates tini procps && \
+    ca-certificates tini procps xz-utils && \
     # tini 用于作为 PID 1 进程，处理僵尸进程
     # 清理缓存
     rm -rf /var/lib/apt/lists/* && \
@@ -64,8 +76,12 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     rm -rf /usr/share/fonts/* /etc/fonts/* && \
     rm -rf /tmp/*
 
+# 安装 su-exec 用于切换用户运行命令
+ADD https://github.com/ncopa/su-exec/releases/download/v0.3/su-exec-static-v0.3-x86_64 /usr/local/bin/su-exec
+RUN chmod +x /usr/local/bin/su-exec
+
 # 从 builder 镜像复制 HBuilderX
-COPY --from=builder /opt/hbuilderx /opt/hbuilderx
+COPY --from=builder /opt/hbuilderx.tar.xz /opt/hbuilderx.tar.xz
 
 # 从 builder 镜像复制 libssl1.1
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/
@@ -89,6 +105,5 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/docker-entrypoint.sh"]
 
 # 创建用户 node
 RUN useradd -m node
-USER node
 
 CMD []
