@@ -1,6 +1,6 @@
 FROM node:22-bookworm-slim AS node
 
-FROM ubuntu:22.04 AS builder
+FROM debian:bookworm-slim AS builder
 
 RUN apt-get update && \
     DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
@@ -24,43 +24,44 @@ RUN strip --strip-unneeded /opt/hbuilderx/cli /opt/hbuilderx/HBuilderX && \
 
 # 精简 HBuilderX
 # plugins 目录下只保留 about compile-dart-sass compile-less compile-node-sass uniapp-cli uniapp-cli-vite
-RUN if [ ${SLIM} == "true" ]; then \
+RUN if [ "${SLIM}" = "true" ]; then \
     # 先把文件夹名字改成临时的
     mv /opt/hbuilderx /opt/hbuilderx_full && \
     mkdir /opt/hbuilderx && \
     # 先复制基础文件
-    cp -r /opt/hbuilderx_full/{HBuilderX,cli,platforms,*.so*} /opt/hbuilderx/ && \
+    for f in HBuilderX cli platforms package.json; \
+        do cp -r /opt/hbuilderx_full/$f /opt/hbuilderx/; done && \
+    cp -r /opt/hbuilderx_full/*.so* /opt/hbuilderx/ && \
     # 创建 plugins 目录
     mkdir -p /opt/hbuilderx/plugins && \
     # 复制需要保留的插件
-    cp -r /opt/hbuilderx_full/plugins/{about,compile-dart-sass,compile-less,compile-node-sass,uniapp-cli,uniapp-cli-vite} /opt/hbuilderx/plugins/ ;\
+    for f in about compile-dart-sass compile-less compile-node-sass uniapp-cli uniapp-cli-vite; \
+        do cp -r /opt/hbuilderx_full/plugins/$f /opt/hbuilderx/plugins/; done \
     fi
 
-# 基础镜像：Ubuntu 22.04（兼容性最好）
-FROM ubuntu:22.04
+# 基础镜像：Debian Bookworm Slim
+FROM debian:bookworm-slim
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
 RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone && \
     # 安装依赖（Qt5、ICU、glib、zlib 等）
     apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    libglib2.0-0 libgl1-mesa-glx \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends --no-install-suggests \
+    libglib2.0-0 libgl1 \
     libharfbuzz0b libfreetype6 \
     libxrender1 libstdc++6 libgcc-s1 \
-    libpcre2-16-0 libicu70 zlib1g \
+    libpcre2-16-0 zlib1g \
     libx11-6 libx11-xcb1 libxcb1 libxcb-render0 libxcb-shm0 \
-    libxcb-icccm4 libxcb-image0 libxcb-keysyms1 libxcb-randr0 \
-    libxcb-shape0 libxcb-sync1 libxcb-xfixes0 libxcb-xinerama0 \
-    libxcb-util1 libxcb-render-util0 libxext6 libxfixes3 libxi6 \
-    libxkbcommon0 libxkbcommon-x11-0 libfontconfig1 \
-    ca-certificates tini \
-    locales && \
-    locale-gen zh_CN.UTF-8 && \
+    libxext6 libxfixes3 libxi6 \
+    libfontconfig1 \
+    ca-certificates tini procps && \
     # tini 用于作为 PID 1 进程，处理僵尸进程
     # 清理缓存
     rm -rf /var/lib/apt/lists/* && \
     apt-get purge -y --auto-remove -o APT::AutoRemove::RecommendsImportant=false && \
+    rm -rf /usr/share/man/* /usr/share/doc/* /usr/share/locale/* /usr/lib/locale/* /usr/share/i18n/* && \
+    rm -rf /usr/share/fonts/* /etc/fonts/* && \
     rm -rf /tmp/*
 
 # 从 builder 镜像复制 HBuilderX
@@ -73,14 +74,9 @@ RUN ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libs
     ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so
 
 # 从 node 镜像复制 Node.js 运行环境
-COPY --from=node /usr/local/lib/node_modules /usr/local/lib/node_modules
-COPY --from=node /opt/yarn-* /opt/
+COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=node /usr/local/bin/node /usr/local/bin/
-RUN ln -s /usr/local/lib/corepack/dist/corepack.js /usr/local/bin/corepack && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
-    ln -s /opt/yarn-*/bin/yarn /usr/local/bin/yarn && \
-    ln -s /opt/yarn-*/bin/yarnpkg /usr/local/bin/yarnpkg
+RUN ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm
 
 
 # 设置环境变量
