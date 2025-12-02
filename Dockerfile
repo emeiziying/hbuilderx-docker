@@ -6,7 +6,8 @@ RUN apt-get update && \
     strip --strip-unneeded /usr/local/bin/node && \
     for f in LICENSE README.md docs man; do \
         rm -rf /usr/local/lib/node_modules/npm/$f; \
-    done
+    done && \
+    find /usr/local/lib/node_modules/npm -type f \( -name "*.so*" -o -name "*.node" \) -exec strip --strip-unneeded {} \;
 
 FROM debian:bookworm-slim AS builder
 
