@@ -75,8 +75,10 @@ COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=node /usr/local/bin/node /usr/local/bin/
 ## 让 corepack / npx 在最终镜像里可直接使用
 ## - corepack 的可执行文件依赖其 node_modules/corepack 目录
+## - 另外，node 官方镜像里的 /usr/local/bin/corepack 是一个 shim，会 require ./lib/corepack.cjs（相对于 /usr/local/bin）
 ## - npx 的可执行文件依赖已复制的 npm 目录
 COPY --from=node /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
+COPY --from=node /usr/local/bin/lib/corepack.cjs /usr/local/bin/lib/
 COPY --from=node /usr/local/bin/corepack /usr/local/bin/
 COPY --from=node /usr/local/bin/npx /usr/local/bin/
 
