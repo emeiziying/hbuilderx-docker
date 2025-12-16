@@ -9,6 +9,46 @@ RUN apt-get update && \
     done && \
     find /usr/local/lib/node_modules/npm -type f \( -name "*.so*" -o -name "*.node" \) -exec strip --strip-unneeded {} \;
 
+# Node 官方镜像里 corepack 的入口文件位置在不同版本间有差异：
+# - 旧版本可能是 /usr/local/bin/lib/corepack.cjs（被 /usr/local/bin/corepack shim require）
+# - 新版本可能不存在该文件，入口在 corepack 包内（例如 dist/corepack.cjs / dist/corepack.js）
+# 为了让后续 COPY 稳定，这里在 node 阶段确保 /usr/local/bin/lib/corepack.cjs 一定存在。
+RUN <<'EOF'
+set -eux
+mkdir -p /usr/local/bin/lib
+
+if [ ! -f /usr/local/bin/lib/corepack.cjs ]; then
+  cat > /usr/local/bin/lib/corepack.cjs <<'EOT'
+#!/usr/bin/env node
+'use strict';
+const candidates = [
+  '/usr/local/lib/node_modules/corepack/dist/corepack.cjs',
+  '/usr/local/lib/node_modules/corepack/dist/corepack.js',
+  '/usr/local/lib/node_modules/corepack/corepack.cjs',
+  '/usr/local/lib/node_modules/corepack/corepack.js',
+];
+
+let loaded = false;
+for (const p of candidates) {
+  try {
+    // corepack 的入口模块通常会自行解析 argv 并执行 CLI
+    // 这里不主动 process.exit()，避免提前退出影响 CLI 行为
+    require(p);
+    loaded = true;
+    break;
+  } catch (e) {}
+}
+
+if (!loaded) {
+  console.error('corepack entry not found under /usr/local/lib/node_modules/corepack');
+  process.exit(1);
+}
+EOT
+
+  chmod 0755 /usr/local/bin/lib/corepack.cjs
+fi
+EOF
+
 FROM debian:bookworm-slim AS builder
 
 ARG HBUILDERX_PATH=./.cache/hbuilderx
