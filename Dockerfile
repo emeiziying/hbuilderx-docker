@@ -1,54 +1,3 @@
-FROM node:22-bookworm-slim AS node
-
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    binutils && \
-    strip --strip-unneeded /usr/local/bin/node && \
-    for f in LICENSE README.md docs man; do \
-        rm -rf /usr/local/lib/node_modules/npm/$f; \
-    done && \
-    find /usr/local/lib/node_modules/npm -type f \( -name "*.so*" -o -name "*.node" \) -exec strip --strip-unneeded {} \;
-
-# Node 官方镜像里 corepack 的入口文件位置在不同版本间有差异：
-# - 旧版本可能是 /usr/local/bin/lib/corepack.cjs（被 /usr/local/bin/corepack shim require）
-# - 新版本可能不存在该文件，入口在 corepack 包内（例如 dist/corepack.cjs / dist/corepack.js）
-# 为了让后续 COPY 稳定，这里在 node 阶段确保 /usr/local/bin/lib/corepack.cjs 一定存在。
-RUN <<'EOF'
-set -eux
-mkdir -p /usr/local/bin/lib
-
-if [ ! -f /usr/local/bin/lib/corepack.cjs ]; then
-  cat > /usr/local/bin/lib/corepack.cjs <<'EOT'
-#!/usr/bin/env node
-'use strict';
-const candidates = [
-  '/usr/local/lib/node_modules/corepack/dist/corepack.cjs',
-  '/usr/local/lib/node_modules/corepack/dist/corepack.js',
-  '/usr/local/lib/node_modules/corepack/corepack.cjs',
-  '/usr/local/lib/node_modules/corepack/corepack.js',
-];
-
-let loaded = false;
-for (const p of candidates) {
-  try {
-    // corepack 的入口模块通常会自行解析 argv 并执行 CLI
-    // 这里不主动 process.exit()，避免提前退出影响 CLI 行为
-    require(p);
-    loaded = true;
-    break;
-  } catch (e) {}
-}
-
-if (!loaded) {
-  console.error('corepack entry not found under /usr/local/lib/node_modules/corepack');
-  process.exit(1);
-}
-EOT
-
-  chmod 0755 /usr/local/bin/lib/corepack.cjs
-fi
-EOF
-
 FROM debian:bookworm-slim AS builder
 
 ARG HBUILDERX_PATH=./.cache/hbuilderx
@@ -96,8 +45,8 @@ RUN apt-get update && \
         do cp -r /opt/hbuilderx_full/plugins/$f /opt/hbuilderx/plugins/; done \
     fi;
 
-# 基础镜像：Debian Bookworm Slim
-FROM debian:bookworm-slim
+# 基础镜像：直接使用完整 Node.js（避免“精简复制”带来的路径/兼容问题）
+FROM node:22-bookworm-slim
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
@@ -109,18 +58,6 @@ COPY --from=builder /opt/hbuilderx /opt/hbuilderx
 
 # 从 builder 镜像复制 libssl1.1
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/
-
-# 从 node 镜像复制 Node.js 运行环境
-COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-COPY --from=node /usr/local/bin/node /usr/local/bin/
-## 让 corepack / npx 在最终镜像里可直接使用
-## - corepack 的可执行文件依赖其 node_modules/corepack 目录
-## - 另外，node 官方镜像里的 /usr/local/bin/corepack 是一个 shim，会 require ./lib/corepack.cjs（相对于 /usr/local/bin）
-## - npx 的可执行文件依赖已复制的 npm 目录
-COPY --from=node /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
-COPY --from=node /usr/local/bin/lib/corepack.cjs /usr/local/bin/lib/
-COPY --from=node /usr/local/bin/corepack /usr/local/bin/
-COPY --from=node /usr/local/bin/npx /usr/local/bin/
 
 # 设置环境变量
 ENV PATH="/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
@@ -152,12 +89,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     # 创建软链接确保 Qt5 能找到 libssl 和 libcrypto
     ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so && \
     ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     # 启用 corepack（提供 pnpm/yarn 的 shim；不会在 build 阶段拉取包）
     corepack enable && \
     # 设置 docker-entrypoint.sh 可执行权限
-    chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    # 创建用户 node
-    useradd -m node
+    chmod +x /usr/local/bin/docker-entrypoint.sh
 
 CMD []
