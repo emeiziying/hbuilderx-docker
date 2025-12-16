@@ -73,6 +73,12 @@ COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linu
 # 从 node 镜像复制 Node.js 运行环境
 COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
 COPY --from=node /usr/local/bin/node /usr/local/bin/
+## 让 corepack / npx 在最终镜像里可直接使用
+## - corepack 的可执行文件依赖其 node_modules/corepack 目录
+## - npx 的可执行文件依赖已复制的 npm 目录
+COPY --from=node /usr/local/lib/node_modules/corepack /usr/local/lib/node_modules/corepack
+COPY --from=node /usr/local/bin/corepack /usr/local/bin/
+COPY --from=node /usr/local/bin/npx /usr/local/bin/
 
 # 设置环境变量
 ENV PATH="/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
@@ -105,6 +111,8 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so && \
     ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so && \
     ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
+    # 启用 corepack（提供 pnpm/yarn 的 shim；不会在 build 阶段拉取包）
+    corepack enable && \
     # 设置 docker-entrypoint.sh 可执行权限
     chmod +x /usr/local/bin/docker-entrypoint.sh && \
     # 创建用户 node
