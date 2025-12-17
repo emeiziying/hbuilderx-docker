@@ -1,14 +1,3 @@
-FROM node:22-bookworm-slim AS node
-
-RUN apt-get update && \
-    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    binutils && \
-    strip --strip-unneeded /usr/local/bin/node && \
-    for f in LICENSE README.md docs man; do \
-        rm -rf /usr/local/lib/node_modules/npm/$f; \
-    done && \
-    find /usr/local/lib/node_modules/npm -type f \( -name "*.so*" -o -name "*.node" \) -exec strip --strip-unneeded {} \;
-
 FROM debian:bookworm-slim AS builder
 
 ARG HBUILDERX_PATH=./.cache/hbuilderx
@@ -56,8 +45,8 @@ RUN apt-get update && \
         do cp -r /opt/hbuilderx_full/plugins/$f /opt/hbuilderx/plugins/; done \
     fi;
 
-# 基础镜像：Debian Bookworm Slim
-FROM debian:bookworm-slim
+# 基础镜像：Node.js 22 on Debian Bookworm Slim（已包含完整的 Node.js 环境）
+FROM node:22-bookworm-slim
 
 # 设置时区为上海
 ENV TZ=Asia/Shanghai
@@ -70,12 +59,9 @@ COPY --from=builder /opt/hbuilderx /opt/hbuilderx
 # 从 builder 镜像复制 libssl1.1
 COPY --from=builder /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/
 
-# 从 node 镜像复制 Node.js 运行环境
-COPY --from=node /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/npm
-COPY --from=node /usr/local/bin/node /usr/local/bin/
-
 # 设置环境变量
 ENV PATH="/opt/hbuilderx:/opt/hbuilderx/bin:${PATH}"
+ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 
 COPY ./docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 
@@ -104,10 +90,9 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     # 创建软链接确保 Qt5 能找到 libssl 和 libcrypto
     ln -s /usr/lib/x86_64-linux-gnu/libssl.so.1.1 /usr/lib/x86_64-linux-gnu/libssl.so && \
     ln -s /usr/lib/x86_64-linux-gnu/libcrypto.so.1.1 /usr/lib/x86_64-linux-gnu/libcrypto.so && \
-    ln -s /usr/local/lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm && \
     # 设置 docker-entrypoint.sh 可执行权限
     chmod +x /usr/local/bin/docker-entrypoint.sh && \
-    # 创建用户 node
-    useradd -m node
+    # 启用 corepack 以支持 yarn 和 pnpm
+    corepack enable
 
 CMD []
