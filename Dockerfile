@@ -77,7 +77,7 @@ RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone &
     libpcre2-16-0 zlib1g \
     libx11-6 libx11-xcb1 libxcb1 \
     libfontconfig1 \
-    ca-certificates tini procps xz-utils && \
+    ca-certificates tini procps xz-utils zip && \
     # tini 用于作为 PID 1 进程，处理僵尸进程
     # 清理缓存
     rm -rf /var/lib/apt/lists/* && \
